@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chess Saviya Clock</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            light: '#0062FF',
+                        }
+                    },
+                    spacing: {
+                        '12': '3rem', 
+                    },
+                    letterSpacing: {
+                        'digits': '0.05em',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Smooth Theme Transition */
+        .theme-transition {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, transform 0.2s ease;
+        }
+
+        /* Number Inputs cleanup */
+        input[type='number']::-webkit-outer-spin-button,
+        input[type='number']::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type='number'] {
+            -moz-appearance: textfield;
+        }
+
+        /* Clock Animations */
+        .clock-btn {
+            transition: background-color 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        /* The Active "Blue" State */
+        .clock-active {
+            opacity: 1;
+            background-color: #0062FF !important; /* Force Blue */
+            color: white !important;
+            z-index: 10;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.1);
+        }
+
+        /* The Inactive State */
+        .clock-inactive {
+            opacity: 0.8;
+            transform: scale(0.98);
+        }
+        
+        /* Standard Tabular Nums for fixed width digits */
+        .time-display {
+            font-feature-settings: "tnum"; 
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Critical low time pulsing (Red background) overrides blue */
+        @keyframes pulse-red {
+            0%, 100% { background-color: #ef4444; color: white; }
+            50% { background-color: #991b1b; color: white;}
+        }
+        .low-time-critical {
+            background-color: #ef4444 !important;
+            animation: pulse-red 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        /* Professional Play/Pause Button Styling */
+        .control-btn-ring {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .control-btn-inner {
+            background: linear-gradient(145deg, #0062FF, #0056e0);
+        }
+        html.dark .control-btn-inner {
+            background: linear-gradient(145deg, #2563eb, #1d4ed8);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen flex flex-col theme-transition">
+
+    <div id="settings-screen" class="flex-1 w-full max-w-lg mx-auto p-6 flex flex-col h-screen overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">Chess Timer</h1>
+            <button id="theme-toggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 transition">
+                <svg id="icon-sun" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <svg id="icon-moon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            </button>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
+            <label class="block text-xs font-bold uppercase text-gray-400 dark:text-gray-500 mb-3 tracking-wider">Quick Presets</label>
+            <div class="grid grid-cols-3 gap-3">
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="1" data-s="0">1 min</button>
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="3" data-s="2">3 | 2</button>
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="5" data-s="0">5 min</button>
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="10" data-s="0">10 min</button>
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="10" data-s="5">10 | 5</button>
+                <button class="preset-btn bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 text-sm font-semibold py-2 rounded-lg transition" data-h="0" data-m="30" data-s="0">30 min</button>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6 flex-grow">
+            <div class="flex justify-between items-center mb-4">
+                <label class="block text-sm font-bold text-gray-900 dark:text-white">Time Control</label>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-gray-500">Different Controls?</span>
+                    <button id="toggle-advanced" class="relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none bg-gray-200 dark:bg-gray-600">
+                        <span id="toggle-knob" class="inline-block w-4 h-4 transform bg-white rounded-full transition-transform translate-x-1 shadow"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <p id="p1-label" class="hidden text-xs font-bold text-brand-light uppercase">Player 1 (White)</p>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Hours</label>
+                        <input type="number" id="h-p1" min="0" value="0" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Minutes</label>
+                        <input type="number" id="m-p1" min="0" value="10" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Increment</label>
+                        <input type="number" id="s-p1" min="0" value="0" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+
+            <div id="p2-inputs" class="space-y-4 mt-6 hidden border-t border-gray-100 dark:border-gray-700 pt-4">
+                <p class="text-xs font-bold text-gray-500 uppercase">Player 2 (Black)</p>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Hours</label>
+                        <input type="number" id="h-p2" min="0" value="0" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Minutes</label>
+                        <input type="number" id="m-p2" min="0" value="10" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[10px] uppercase font-bold text-gray-400 mb-1">Increment</label>
+                        <input type="number" id="s-p2" min="0" value="0" class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error-msg" class="text-red-500 text-sm font-medium text-center mb-2 hidden"></div>
+
+        <button id="start-btn" class="w-full bg-brand-light dark:bg-blue-600 hover:opacity-90 text-white font-bold text-lg py-4 rounded-xl shadow-lg transform active:scale-95 transition-all">
+            Start Game
+        </button>
+        
+        <div class="text-center text-xs text-gray-400 mt-6 pb-12">
+            &copy; <span id="year-display"></span> CHESS SAVIYA. All Rights Reserved.
+        </div>
+    </div>
+
+    <div id="clock-screen" class="hidden h-screen w-full flex flex-col p-2 sm:p-4 pb-12">
+        
+        <button id="clock-top" class="clock-btn clock-inactive relative w-full flex-1 rounded-3xl cursor-pointer border-4 border-transparent bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-200 flex items-center justify-center">
+            <div class="w-full h-full relative transform rotate-180 flex items-center justify-center">
+                
+                <div class="absolute top-5 left-5 text-lg font-bold opacity-70">
+                    Moves: <span id="moves-top">0</span>
+                </div>
+
+                <div class="absolute top-5 right-5">
+                    <div class="w-6 h-6 bg-black border-2 border-white rounded-full shadow-sm"></div>
+                </div>
+
+                <span id="time-top" class="time-display text-7xl sm:text-8xl lg:text-9xl font-bold tracking-wide">10:00</span>
+            </div>
+        </button>
+
+        <div class="h-28 flex-shrink-0 flex items-center justify-center space-x-6 sm:space-x-10 z-20">
+            
+            <button id="btn-settings" class="p-3 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+            
+            <button id="btn-pause" class="group relative rounded-full p-1 bg-white dark:bg-gray-800 shadow-xl ring-1 ring-gray-100 dark:ring-gray-700 transform transition-transform active:scale-95">
+                <div class="control-btn-inner h-14 w-14 rounded-full flex items-center justify-center text-white shadow-inner">
+                    <span id="icon-pause-container">
+                        <svg class="w-6 h-6 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M18 10a1 1 0 01-1 1h-1a1 1 0 01-1-1V4a1 1 0 011-1h1a1 1 0 011 1v6zm-9 0a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1h1a1 1 0 011 1v6z" clip-rule="evenodd" transform="translate(0, 4)"></path></svg>
+                    </span>
+
+                    <span id="icon-play-container" class="hidden pl-1">
+                        <svg class="w-6 h-6 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                    </span>
+                </div>
+            </button>
+
+            <button id="btn-reset" class="p-3 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+
+             <button id="btn-sound" class="p-3 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-700 transition">
+                <span id="icon-sound-on-container">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                </span>
+                <span id="icon-sound-off-container" class="hidden">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                </span>
+            </button>
+        </div>
+
+        <button id="clock-bottom" class="clock-btn clock-inactive relative w-full flex-1 rounded-3xl cursor-pointer border-4 border-transparent bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-200 flex items-center justify-center">
+            <div class="w-full h-full relative flex items-center justify-center">
+                
+                <div class="absolute top-5 left-5 text-lg font-bold opacity-70">
+                    Moves: <span id="moves-bottom">0</span>
+                </div>
+
+                <div class="absolute top-5 right-5">
+                    <div class="w-6 h-6 bg-white border-2 border-black rounded-full shadow-sm"></div>
+                </div>
+
+                <span id="time-bottom" class="time-display text-7xl sm:text-8xl lg:text-9xl font-bold tracking-wide">10:00</span>
+            </div>
+        </button>
+    </div>
+
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden transition-opacity opacity-0"></div>
+
+    <div id="modal-gameover" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-11/12 max-w-sm z-50 hidden scale-90 opacity-0 transition-all">
+        <button id="close-gameover" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+
+        <div class="text-center pt-2">
+            <div class="mx-auto w-24 h-24 mb-4 flex items-center justify-center">
+                
+                <div id="icon-white-wins" class="hidden">
+                    <img src="https://i.postimg.cc/nrrr69rQ/white_chess_king.png" 
+                         alt="White Wins" 
+                         class="w-full h-full object-contain">
+                    </div>
+
+                <div id="icon-black-wins" class="hidden">
+                    <img src="https://i.postimg.cc/C555Wn5q/black_chess_king.png" 
+                         alt="Black Wins" 
+                         class="w-full h-full object-contain">
+                    </div>
+
+            </div>
+
+            <h2 id="winner-text" class="text-3xl font-black text-gray-900 dark:text-white mb-2">White Wins!</h2>
+            <p id="win-reason" class="text-gray-500 dark:text-gray-400 mb-6 font-medium">Timeout</p>
+            
+            <div class="space-y-3">
+                <button id="btn-play-again" class="w-full bg-brand-light dark:bg-blue-600 hover:opacity-90 text-white font-bold py-3 rounded-xl transition">Play Again</button>
+                <button id="btn-view-board" class="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium py-3 rounded-xl transition">View Final Times</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-reset" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-11/12 max-w-sm z-50 hidden scale-90 opacity-0 transition-all">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Reset Clock?</h3>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">Current game progress will be lost.</p>
+        <div class="flex space-x-3">
+            <button id="cancel-reset" class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white py-3 rounded-xl font-bold">Cancel</button>
+            <button id="confirm-reset" class="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const body = document.body;
+            const settingsScreen = document.getElementById('settings-screen');
+            const clockScreen = document.getElementById('clock-screen');
+            const errorMsg = document.getElementById('error-msg');
+            const yearDisplay = document.getElementById('year-display');
+            
+            // Set Dynamic Year
+            yearDisplay.textContent = new Date().getFullYear();
+
+            // Theme
+            const themeToggle = document.getElementById('theme-toggle');
+            const iconSun = document.getElementById('icon-sun');
+            const iconMoon = document.getElementById('icon-moon');
+            
+            // Settings Form
+            const inputs = {
+                p1: { h: document.getElementById('h-p1'), m: document.getElementById('m-p1'), s: document.getElementById('s-p1') },
+                p2: { h: document.getElementById('h-p2'), m: document.getElementById('m-p2'), s: document.getElementById('s-p2') }
+            };
+            const toggleAdvanced = document.getElementById('toggle-advanced');
+            const toggleKnob = document.getElementById('toggle-knob');
+            const p2InputContainer = document.getElementById('p2-inputs');
+            const p1Label = document.getElementById('p1-label');
+            const presetBtns = document.querySelectorAll('.preset-btn');
+            const startBtn = document.getElementById('start-btn');
+            
+            // Clock UI
+            const clockTop = document.getElementById('clock-top'); // Player 2 (Black)
+            const clockBottom = document.getElementById('clock-bottom'); // Player 1 (White)
+            const timeTop = document.getElementById('time-top');
+            const timeBottom = document.getElementById('time-bottom');
+            const movesTop = document.getElementById('moves-top');
+            const movesBottom = document.getElementById('moves-bottom');
+
+            // Controls
+            const btnPause = document.getElementById('btn-pause');
+            const btnReset = document.getElementById('btn-reset');
+            const btnSettings = document.getElementById('btn-settings');
+            const btnSound = document.getElementById('btn-sound');
+            
+            // Icon Containers (For toggling visibility)
+            const iconPlayContainer = document.getElementById('icon-play-container');
+            const iconPauseContainer = document.getElementById('icon-pause-container');
+            const iconSoundOnContainer = document.getElementById('icon-sound-on-container');
+            const iconSoundOffContainer = document.getElementById('icon-sound-off-container');
+            const iconWhiteWins = document.getElementById('icon-white-wins');
+            const iconBlackWins = document.getElementById('icon-black-wins');
+
+            // Modals
+            const backdrop = document.getElementById('modal-backdrop');
+            const modalGameOver = document.getElementById('modal-gameover');
+            const modalReset = document.getElementById('modal-reset');
+            const winnerText = document.getElementById('winner-text');
+            const btnPlayAgain = document.getElementById('btn-play-again');
+            const btnViewBoard = document.getElementById('btn-view-board');
+            const btnCloseGameOver = document.getElementById('close-gameover');
+            const btnConfirmReset = document.getElementById('confirm-reset');
+            const btnCancelReset = document.getElementById('cancel-reset');
+
+            // --- Game State ---
+            let gameState = {
+                active: false,
+                player: null, // 1 = White/Bottom, 2 = Black/Top
+                finished: false,
+                isHandicap: false,
+                p1: { time: 600, initial: 600, inc: 0, moves: 0 },
+                p2: { time: 600, initial: 600, inc: 0, moves: 0 },
+                soundEnabled: true
+            };
+            
+            let timerInterval = null;
+            let synth = null;
+
+            // --- Audio Init ---
+            function initAudio() {
+                if (!gameState.soundEnabled) return;
+                try {
+                    synth = new Tone.Synth({
+                        oscillator: { type: "triangle" },
+                        envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 0.1 }
+                    }).toDestination();
+                } catch(e) { console.warn("Audio init failed", e); }
+            }
+
+            function playSound(type) {
+                if (!gameState.soundEnabled || !synth) return;
+                Tone.start(); 
+                const now = Tone.now();
+                if (type === 'move') synth.triggerAttackRelease("C5", "32n", now);
+                if (type === 'start') synth.triggerAttackRelease("E5", "16n", now);
+                if (type === 'end') {
+                    synth.triggerAttackRelease("A4", "8n", now);
+                    synth.triggerAttackRelease("A3", "8n", now + 0.1);
+                }
+            }
+
+            // --- Theme Logic ---
+            function loadTheme() {
+                // Default to dark mode
+                const stored = localStorage.getItem('chess_theme');
+                if (stored === 'light') {
+                    document.documentElement.classList.remove('dark');
+                    iconSun.classList.remove('hidden');
+                    iconMoon.classList.add('hidden');
+                } else {
+                    document.documentElement.classList.add('dark');
+                    iconSun.classList.add('hidden');
+                    iconMoon.classList.remove('hidden');
+                }
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('chess_theme', isDark ? 'dark' : 'light');
+                iconSun.classList.toggle('hidden', isDark);
+                iconMoon.classList.toggle('hidden', !isDark);
+            });
+            loadTheme();
+
+            // --- Settings Logic ---
+            function syncInputs() {
+                if (!gameState.isHandicap) {
+                    inputs.p2.h.value = inputs.p1.h.value;
+                    inputs.p2.m.value = inputs.p1.m.value;
+                    inputs.p2.s.value = inputs.p1.s.value;
+                }
+                // Clear error when typing
+                errorMsg.classList.add('hidden');
+            }
+
+            Object.values(inputs.p1).forEach(input => input.addEventListener('input', syncInputs));
+
+            toggleAdvanced.addEventListener('click', () => {
+                gameState.isHandicap = !gameState.isHandicap;
+                if (gameState.isHandicap) {
+                    toggleKnob.classList.add('translate-x-5');
+                    toggleAdvanced.classList.replace('bg-gray-200', 'bg-brand-light');
+                    toggleAdvanced.classList.replace('bg-gray-600', 'bg-blue-600');
+                    p2InputContainer.classList.remove('hidden');
+                    p1Label.classList.remove('hidden');
+                } else {
+                    toggleKnob.classList.remove('translate-x-5');
+                    toggleAdvanced.classList.replace('bg-brand-light', 'bg-gray-200');
+                    toggleAdvanced.classList.replace('bg-blue-600', 'bg-gray-600');
+                    p2InputContainer.classList.add('hidden');
+                    p1Label.classList.add('hidden');
+                    syncInputs();
+                }
+            });
+
+            presetBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    inputs.p1.h.value = btn.dataset.h;
+                    inputs.p1.m.value = btn.dataset.m;
+                    inputs.p1.s.value = btn.dataset.s;
+                    syncInputs();
+                });
+            });
+
+            // --- Time Formatting ---
+            function formatTime(seconds) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = Math.floor(seconds % 60);
+                const ms = Math.floor((seconds % 1) * 10);
+
+                if (h > 0) {
+                    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                } else if (m > 0 || s >= 10) {
+                    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                } else {
+                    return `${s}.${ms}`;
+                }
+            }
+
+            // --- UI Updates ---
+            function updateDisplay() {
+                timeBottom.textContent = formatTime(gameState.p1.time);
+                timeTop.textContent = formatTime(gameState.p2.time);
+                movesBottom.textContent = gameState.p1.moves;
+                movesTop.textContent = gameState.p2.moves;
+                
+                checkLowTime(gameState.p1.time, clockBottom);
+                checkLowTime(gameState.p2.time, clockTop);
+            }
+
+            function checkLowTime(time, el) {
+                if (time < 10) el.classList.add('low-time-critical');
+                else el.classList.remove('low-time-critical');
+            }
+
+            function setActivePlayerUI(player) {
+                // 1 = Bottom (White), 2 = Top (Black)
+                
+                // Clear active states first
+                clockBottom.classList.remove('clock-active');
+                clockTop.classList.remove('clock-active');
+                clockBottom.classList.add('clock-inactive');
+                clockTop.classList.add('clock-inactive');
+
+                if (player === 1) {
+                    // Activate Bottom (White)
+                    clockBottom.classList.add('clock-active');
+                    clockBottom.classList.remove('clock-inactive');
+                } else if (player === 2) {
+                    // Activate Top (Black)
+                    clockTop.classList.add('clock-active');
+                    clockTop.classList.remove('clock-inactive');
+                }
+            }
+
+            // --- Game Logic ---
+            function gameTick() {
+                if (!gameState.active || gameState.finished) return;
+
+                if (gameState.player === 1) {
+                    gameState.p1.time = Math.max(0, gameState.p1.time - 0.1);
+                    if (gameState.p1.time <= 0) gameOver(2); // Top Wins
+                } else if (gameState.player === 2) {
+                    gameState.p2.time = Math.max(0, gameState.p2.time - 0.1);
+                    if (gameState.p2.time <= 0) gameOver(1); // Bottom Wins
+                }
+                updateDisplay();
+            }
+
+            function switchTurn(clickedPlayer) {
+                if (gameState.finished) return;
+                
+                // If paused and clicking opponent clock to start?
+                if (!gameState.active && gameState.player !== null && gameState.player !== clickedPlayer) {
+                    resumeGame();
+                }
+
+                if (gameState.player === clickedPlayer) {
+                    // Add increment
+                    if (clickedPlayer === 1) {
+                        gameState.p1.time += gameState.p1.inc;
+                        gameState.p1.moves++;
+                        gameState.player = 2;
+                    } else {
+                        gameState.p2.time += gameState.p2.inc;
+                        gameState.p2.moves++;
+                        gameState.player = 1;
+                    }
+                    
+                    updateDisplay();
+                    setActivePlayerUI(gameState.player);
+                    playSound('move');
+                    
+                    if (!gameState.active) resumeGame();
+                }
+            }
+
+            function startGame() {
+                const p1Seconds = (parseInt(inputs.p1.h.value)*3600) + (parseInt(inputs.p1.m.value)*60);
+                const p2Seconds = (parseInt(inputs.p2.h.value)*3600) + (parseInt(inputs.p2.m.value)*60);
+                
+                // Inline Error Handling
+                if (p1Seconds === 0) {
+                    errorMsg.textContent = "Please set a valid time.";
+                    errorMsg.classList.remove('hidden');
+                    return;
+                }
+
+                gameState.p1.initial = p1Seconds;
+                gameState.p1.time = p1Seconds;
+                gameState.p1.inc = parseInt(inputs.p1.s.value);
+                gameState.p1.moves = 0;
+
+                gameState.p2.initial = p2Seconds;
+                gameState.p2.time = p2Seconds;
+                gameState.p2.inc = parseInt(inputs.p2.s.value);
+                gameState.p2.moves = 0;
+
+                gameState.player = null; 
+                gameState.active = false;
+                gameState.finished = false;
+
+                updateDisplay();
+                setActivePlayerUI(null);
+
+                settingsScreen.classList.add('hidden');
+                clockScreen.classList.remove('hidden');
+                
+                initAudio();
+            }
+
+            function resumeGame() {
+                if(gameState.finished) return;
+                
+                if (gameState.player === null) {
+                    gameState.player = 1; // White starts
+                    setActivePlayerUI(1);
+                    playSound('start');
+                }
+                
+                gameState.active = true;
+                iconPlayContainer.classList.add('hidden');
+                iconPauseContainer.classList.remove('hidden');
+                
+                clearInterval(timerInterval);
+                timerInterval = setInterval(gameTick, 100);
+            }
+
+            function pauseGame() {
+                gameState.active = false;
+                clearInterval(timerInterval);
+                iconPlayContainer.classList.remove('hidden');
+                iconPauseContainer.classList.add('hidden');
+                // Remove active coloring on pause to show neutrality
+                clockBottom.classList.remove('clock-active');
+                clockTop.classList.remove('clock-active');
+                clockBottom.classList.add('clock-inactive');
+                clockTop.classList.add('clock-inactive');
+            }
+
+            function gameOver(winner) {
+                gameState.finished = true;
+                gameState.active = false;
+                clearInterval(timerInterval);
+                playSound('end');
+
+                winnerText.textContent = winner === 1 ? "White Wins!" : "Black Wins!";
+                
+                // Show Correct King Icon
+                if (winner === 1) {
+                    iconWhiteWins.classList.remove('hidden');
+                    iconBlackWins.classList.add('hidden');
+                } else {
+                    iconWhiteWins.classList.add('hidden');
+                    iconBlackWins.classList.remove('hidden');
+                }
+                
+                toggleModal(modalGameOver, true);
+            }
+
+            // --- Event Listeners ---
+            startBtn.addEventListener('click', startGame);
+
+            // Clock Presses (Mouse & Touch)
+            clockBottom.addEventListener('mousedown', (e) => { e.preventDefault(); switchTurn(1); });
+            clockTop.addEventListener('mousedown', (e) => { e.preventDefault(); switchTurn(2); });
+            clockBottom.addEventListener('touchstart', (e) => { e.preventDefault(); switchTurn(1); });
+            clockTop.addEventListener('touchstart', (e) => { e.preventDefault(); switchTurn(2); });
+
+            btnPause.addEventListener('click', () => {
+                if (gameState.active) pauseGame();
+                else resumeGame();
+            });
+
+            btnReset.addEventListener('click', () => {
+                pauseGame();
+                toggleModal(modalReset, true);
+            });
+            
+            btnConfirmReset.addEventListener('click', () => {
+                toggleModal(modalReset, false);
+                // Reset to initial settings
+                gameState.p1.time = gameState.p1.initial;
+                gameState.p2.time = gameState.p2.initial;
+                gameState.p1.moves = 0;
+                gameState.p2.moves = 0;
+                gameState.player = null;
+                gameState.finished = false;
+                updateDisplay();
+                setActivePlayerUI(null);
+                iconPlayContainer.classList.remove('hidden');
+                iconPauseContainer.classList.add('hidden');
+            });
+            
+            btnCancelReset.addEventListener('click', () => toggleModal(modalReset, false));
+
+            btnPlayAgain.addEventListener('click', () => {
+                toggleModal(modalGameOver, false);
+                btnConfirmReset.click();
+            });
+
+            btnViewBoard.addEventListener('click', () => toggleModal(modalGameOver, false));
+            btnCloseGameOver.addEventListener('click', () => toggleModal(modalGameOver, false));
+
+            btnSettings.addEventListener('click', () => {
+                pauseGame();
+                clockScreen.classList.add('hidden');
+                settingsScreen.classList.remove('hidden');
+            });
+
+            btnSound.addEventListener('click', () => {
+                gameState.soundEnabled = !gameState.soundEnabled;
+                if(gameState.soundEnabled) {
+                    iconSoundOnContainer.classList.remove('hidden');
+                    iconSoundOffContainer.classList.add('hidden');
+                    initAudio();
+                } else {
+                    iconSoundOnContainer.classList.add('hidden');
+                    iconSoundOffContainer.classList.remove('hidden');
+                }
+            });
+
+            // Modal Utility
+            function toggleModal(modal, show) {
+                if (show) {
+                    backdrop.classList.remove('hidden');
+                    modal.classList.remove('hidden');
+                    setTimeout(() => {
+                        backdrop.classList.remove('opacity-0');
+                        modal.classList.remove('opacity-0', 'scale-90');
+                        modal.classList.add('opacity-100', 'scale-100');
+                    }, 10);
+                } else {
+                    backdrop.classList.add('opacity-0');
+                    modal.classList.remove('opacity-100', 'scale-100');
+                    modal.classList.add('opacity-0', 'scale-90');
+                    setTimeout(() => {
+                        backdrop.classList.add('hidden');
+                        modal.classList.add('hidden');
+                    }, 300);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
